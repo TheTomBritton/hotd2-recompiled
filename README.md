@@ -76,8 +76,9 @@ dev server can also serve it from `HOTD2_ROM_DIR` (default `C:\RetroBat\roms\nao
 `HOTD2_DUMP_FRAMES=…` (RAM and AICA register dumps) · `HOTD2_REGION=0|1|2` ·
 `HOTD2_LISTCRC=file` / `HOTD2_LISTDUMP=renders` (display-list CRCs / raw lists) ·
 `HOTD2_INTERP_ALL=1` (interpret everything) · `HOTD2_FREEZE=addr=byte@frame,…`
-(hold RAM bytes, e.g. infinite lives for coverage) · `HOTD2_INPUT=@file` (script from
-a file). Build with `HOTD2_CFLAGS=-DHOTD2_DIFF` for the per-function
+(hold RAM bytes, e.g. infinite lives for coverage) · `HOTD2_BOSS_HP=n[@frame]` (cap the
+current boss's health at n once its fight has run for `HOTD2_BOSS_WAIT` frames, default
+1800, so scripted runs clear every boss) · `HOTD2_INPUT=@file` (script from a file). Build with `HOTD2_CFLAGS=-DHOTD2_DIFF` for the per-function
 recompiler-vs-interpreter check (`runtime/diff.c`).
 
 `HOTD2_LISTDUMP=N` also writes VRAM and PVR register dumps; copy them to `web/replay/`

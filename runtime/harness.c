@@ -248,6 +248,61 @@ static void wav_pump(void)
 	}
 }
 
+/* HOTD2_BOSS_HP=n[@from]: from frame `from` on, cap the current boss's health at n
+ * (0 finishes it at once, 1 lets the next hit do it), so a scripted run that cannot
+ * aim still clears every boss. The game keeps the boss's object pointer at 0x0C3D1318
+ * (null when nothing is on); every boss's update code keeps its health as an s16 at +0x118
+ * and its starting health at +0x11A, and writes their ratio to the bar at 0x0C3D11FC.
+ * The same pointer also holds a chapter's scripted events for a few seconds (objects of
+ * 60-140 points mid-chapter, a boss's entrance), and capping those changes the script: a
+ * boss's 2-point entrance object, capped, never handed over to the boss. So an object is
+ * only capped once it has held the pointer for HOTD2_BOSS_WAIT frames (default 1800,
+ * 30 s) while the bar is up (not every boss divides by +0x11A: f_0c02462c's bar is
+ * health / 120). Each object is logged as it arrives, and again when the cap starts. */
+static void boss_cap(u64 frame)
+{
+	static const char *spec;
+	static long cap = -1, wait = 1800;
+	static u64 from, since;
+	static u32 last;
+	static int capping;
+	if (!spec) {
+		spec = getenv("HOTD2_BOSS_HP") ? getenv("HOTD2_BOSS_HP") : "";
+		if (*spec) {
+			char *end;
+			cap = strtol(spec, &end, 0);
+			if (*end == '@') from = strtoull(end + 1, NULL, 10);
+		}
+		if (getenv("HOTD2_BOSS_WAIT")) wait = strtol(getenv("HOTD2_BOSS_WAIT"), NULL, 0);
+	}
+	u32 boss;
+	memcpy(&boss, ram + (0x0C3D1318u & RAM_MASK), 4);
+	s16 hp = 0, max = 0;
+	if (is_ram(boss)) {
+		memcpy(&hp, ram + ((boss + 0x118) & RAM_MASK), 2);
+		memcpy(&max, ram + ((boss + 0x11A) & RAM_MASK), 2);
+	}
+	if (boss != last) {
+		fprintf(stderr, "boss: frame %llu object %08X health %d/%d\n", (unsigned long long)frame, boss, hp, max);
+		last = boss;
+		since = frame;
+		capping = 0;
+	}
+	if (cap < 0 || frame < from || !is_ram(boss) || max <= 0 || frame - since < (u64)wait) return;
+	if (!capping) {
+		float bar;
+		memcpy(&bar, ram + (0x0C3D11FCu & RAM_MASK), 4);
+		if (!(bar > 0)) return;
+		fprintf(stderr, "boss: frame %llu capping %08X at %ld (health %d/%d, bar %.3f)\n",
+			(unsigned long long)frame, boss, cap, hp, max, bar);
+		capping = 1;
+	}
+	if (hp > cap) {
+		hp = (s16)cap;
+		memcpy(ram + ((boss + 0x118) & RAM_MASK), &hp, 2);
+	}
+}
+
 static void dump_on_frame(u64 frame)
 {
 	if (frame_limit && frame >= frame_limit)
@@ -267,6 +322,7 @@ static void dump_on_frame(u64 frame)
 		p = strchr(p, ',');
 		if (p) p++;
 	}
+	boss_cap(frame);
 	static const char *spec;
 	if (!spec && !(spec = getenv("HOTD2_DUMP_FRAMES"))) spec = "";
 	for (const char *p = spec; *p; ) {
